@@ -5,6 +5,7 @@ Shioaji 只讀行情中介服務
 """
 
 import os
+import time
 from datetime import datetime, timezone, timedelta
 
 from flask import Flask, request, jsonify
@@ -30,6 +31,23 @@ def get_api():
         _api = sj.Shioaji()
         _api.login(api_key=API_KEY, secret_key=SECRET_KEY)
     return _api
+
+
+def find_contract(api, stock_id, retries=15, delay=1):
+    """
+    嘗試取得股票的商品資料(Contract)。
+    Shioaji 登入後，商品資料是背景慢慢下載的，剛登入時可能還沒下載完成，
+    這裡用重試機制等待，最多等 retries * delay 秒（預設最多等15秒）。
+    """
+    for _ in range(retries):
+        try:
+            contract = api.Contracts.Stocks[stock_id]
+            if contract:
+                return contract
+        except Exception:
+            pass
+        time.sleep(delay)
+    return None
 
 
 def check_token():
@@ -71,16 +89,20 @@ def quotes():
         return jsonify({"error": "Shioaji 登入失敗：" + str(err)}), 500
 
     contracts = []
+    missing_ids = []
     for sid in stock_ids:
-        try:
-            contract = api.Contracts.Stocks[sid]
-            if contract:
-                contracts.append(contract)
-        except Exception:
-            continue
+        contract = find_contract(api, sid)
+        if contract:
+            contracts.append(contract)
+        else:
+            missing_ids.append(sid)
 
     if not contracts:
-        return jsonify({"quotes": []})
+        return jsonify({
+            "quotes": [],
+            "note": "找不到商品資料，可能是股票代碼錯誤，或 Shioaji 商品資料尚未下載完成，稍後再試一次",
+            "missing_ids": missing_ids
+        })
 
     try:
         snapshots = api.snapshots(contracts)
