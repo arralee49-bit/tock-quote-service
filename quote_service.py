@@ -119,6 +119,9 @@ def quotes():
             "high": getattr(snap, "high", ""),
             "low": getattr(snap, "low", ""),
             "volume": getattr(snap, "total_volume", ""),
+            # Shioaji 快照本身就有算好漲跌／漲跌幅，直接帶出來，不用自己重算
+            "change": getattr(snap, "change_price", ""),
+            "changePercent": getattr(snap, "change_rate", ""),
             "time": now_str,
             "source": "SHIOAJI"
         })
